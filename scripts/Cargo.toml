@@ -4,10 +4,23 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[[bin]]
+name = "sp1-verify-spike-script"
+path = "src/main.rs"
+
+[[bin]]
+name = "onchain-tx"
+path = "src/onchain_tx.rs"
+
 [dependencies]
-sp1-verify-spike = { path = "../programs/sp1-verify-spike" }
+sp1-verify-spike = { path = "../programs/sp1-verify-spike", default-features = false, features = ["no-entrypoint"] }
 parity-scale-codec.workspace = true
 alloy-sol-types.workspace = true
 alloy-primitives.workspace = true
 sha3.workspace = true
 hex.workspace = true
+solana-sdk.workspace = true
+solana-client = "=2.1.6"
+solana-transaction-status = "=2.1.6"
+bincode = "1.3"
+tokio.workspace = true

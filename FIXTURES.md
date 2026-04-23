@@ -1,86 +1,73 @@
-# Fixtures, Tests & Findings — Solana Spike
+# Fixtures
 
-Quick reference for the SP1 v6 → `groth16-solana` direct adapter. For full context see `../SOLANA_INTEGRATION_PLAN.md` (Findings section).
+Every piece of test data the verifier and its harnesses consume, in one place.
 
-## Fixtures
+## Files in `proofs/`
 
-| Fixture | Source | Size | Purpose |
-|---|---|---|---|
-| `WIRE_PROOF` (inlined hex in `scripts/src/main.rs`) | `modules/pallets/beefy-consensus-proofs/src/benchmarking.rs:39` | 808 B | Real Hyperbridge BEEFY SP1 v6 wire proof (`[PROOF_TYPE_SP1=0x01] ++ SCALE(Sp1BeefyProof)`). Inner Groth16 proof = 356 B. |
-| `TRUSTED_STATE_SCALE` (inlined hex) | `benchmarking.rs:37` | 128 B | SCALE-encoded `ConsensusState` paired with the fixture. |
-| `FIXTURE_VKEY` (inlined hex) | `benchmarking.rs:41` | 32 B | Hyperbridge's SP1 circuit vkey hash (`0x0059fd0bff44…`). |
-| `proofs/groth16_vk_v6_1_0.bin` | `succinctlabs/sp1@v6.1.0/crates/verifier/vk-artifacts/groth16_vk.bin` | 492 B | SP1 v6.1.0 Groth16 BN254 verifying key. sha256 `4388a21c687fdd5f218d7e3d13190cac4c5355818d3605fd5fb811df468ee696`. Byte-identical to polytope-labs fork. |
-| `VK_ROOT_V6_1_0_BYTES` (const in `programs/sp1-verify-spike/src/vk.rs`) | Extracted from fixture proof at offset `[36..68]` | 32 B | `0x002f850ee998974d6cc00e50cd0814b098c05bfade466d28573240d057f25352`. Upstream computes this dynamically from `VerifierRecursionVks::default().root()`; we hardcode per SP1 version. |
-| `proofs/naive_consensus_message.bin` | generated from live Polkadot RPC (see `../modules/consensus/beefy/prover/tests/dump_naive_fixture.rs`) | 33,985 B | Historical — from earlier naive-path exploration. Not used by the SP1 adapter; retained for reference. |
-| `proofs/naive_trusted_state.bin` | same | 128 B | Same — historical. |
+| File | Size | What it is |
+|---|---|---|
+| `groth16_vk_v6_1_0.bin` | 492 B | The Groth16 verifying key for SP1 v6.1.0. Byte-identical to upstream [`succinctlabs/sp1@v6.1.0/crates/verifier/vk-artifacts/groth16_vk.bin`](https://github.com/succinctlabs/sp1/blob/v6.1.0/crates/verifier/vk-artifacts/groth16_vk.bin) (sha256 `4388a21c687fdd5f218d7e3d13190cac4c5355818d3605fd5fb811df468ee696`). Loaded via `include_bytes!` in `programs/sp1-verify-spike/src/vk.rs`. |
+| `naive_consensus_message.bin` | 33,985 B | Historical artifact from an abandoned exploration of non-zk BEEFY verification. Generated from live Polkadot RPC. Not used by the SP1 adapter — kept only as reference data. |
+| `naive_trusted_state.bin` | 128 B | Same — historical. |
 
-## Tests
+## Inlined constants
 
-### `solana/scripts/src/main.rs` — host smoke test
+Defined as hex literals in `scripts/src/main.rs` and `scripts/src/onchain_tx.rs`. Copied once from Hyperbridge's [`benchmarking.rs`](https://github.com/polytope-labs/hyperbridge/blob/main/modules/pallets/beefy-consensus-proofs/src/benchmarking.rs) so the spike can run without a live network connection.
 
-End-to-end verification of the real BEEFY fixture through our SP1 v6 adapter:
+| Constant | Size | What it is |
+|---|---|---|
+| `WIRE_PROOF_HEX` | 808 B | A real Hyperbridge BEEFY consensus update for one relay-chain block. Format: `[0x01] ++ SCALE-encoded Sp1BeefyProof`. The inner SP1 Groth16 proof is 356 bytes. |
+| `TRUSTED_STATE_SCALE_HEX` | 128 B | The `ConsensusState` (authority set + latest verified height) that precedes `WIRE_PROOF_HEX`. Required to verify the proof. |
+| `SP1_VKEY_HASH_HEX` | 32 B | Hash of the SP1 circuit that generated the proof (Hyperbridge's BEEFY verifier circuit): `0x0059fd0bff44da77999bb7974cbcf2ac7dc89e5869352f20a2f3cd46c9f53d5c`. Feeds into the Groth16 public inputs. |
 
-1. Hex-decode `TRUSTED_STATE_SCALE` and `WIRE_PROOF`.
-2. SCALE-decode `Sp1BeefyProof` (via locally replicated types, no polkadot-sdk pull-in).
-3. Build Solidity-ABI `PublicInputs` via alloy-sol-types — byte-identical to `modules/consensus/beefy/verifier/src/sp1.rs:77-83`.
-4. Call `verify_sp1_v6(proof, public_inputs, sp1_vkey_hash, &VK_ROOT_V6_1_0_BYTES, &[0u8; 32])`.
-5. Assert the pairing check passes.
+## Constants in code
 
-Run:
-```
-cd solana/scripts && cargo run --release
-```
+| Constant | Defined in | What it is |
+|---|---|---|
+| `VK_ROOT_V6_1_0_BYTES` | `programs/sp1-verify-spike/src/vk.rs` | `0x002f850ee998974d6cc00e50cd0814b098c05bfade466d28573240d057f25352` — the recursion-VK merkle root that SP1 v6 commits to as a public input. Upstream computes this dynamically; it's constant per SP1 version, so we captured it from the fixture once (extractable via `extract_vk_root(proof)`) and hardcoded. |
 
-### `solana/programs/sp1-verify-spike` — on-chain program
+## Decoded proof structure
 
-Minimal Solana program with an `entrypoint!` calling `verify_sp1_v6`. Instruction-data layout:
+`Sp1BeefyProof` after SCALE decoding (see `programs/sp1-verify-spike/src/types.rs`):
 
 ```
-[0..32]    sp1_vkey_hash        (32 B)
-[32..36]   proof_len            (u32, big-endian)
-[36..36+p] proof                (356 B for v6)
-[36+p..]   sp1_public_inputs    (Solidity-ABI-encoded BEEFY PublicInputs, 256 B for 1 header)
+block_number:     u32
+validator_set_id: u64
+mmr_leaf:         MmrLeaf
+headers:          Vec<ParachainHeader>
+proof:            Vec<u8>   // 356 B for SP1 v6
 ```
 
-Build for Solana BPF:
+For the fixture above:
+
 ```
-cd solana && cargo build-sbf --manifest-path programs/sp1-verify-spike/Cargo.toml
+block_number:            30,701,354
+validator_set_id:        0x1275
+parachain headers:       1 (para_id 3367, 313 B SCALE-encoded)
+inner Groth16 proof:     356 B
 ```
 
-Produces `target/deploy/sp1_verify_spike.so` (~140 KB).
+## Groth16 public-input construction
 
-## Findings
+The BEEFY circuit commits to this Solidity-ABI-encoded struct:
 
-### Verified dimensions
+```solidity
+struct PublicInputs {
+    bytes32 authorities_root;         // = authority.keyset_commitment
+    uint256 authorities_len;          // = authority.len
+    bytes32 leaf_hash;                // = keccak256(mmr_leaf.encode())
+    ParachainHeaderHash[] headers;    // each = (para_id, keccak256(header_scale))
+}
+```
 
-| Slice | Bytes |
-|---|---|
-| Wire proof (`[0x01] ++ SCALE(Sp1BeefyProof)`) | 808 |
-| Inner v6 Groth16 proof | 356 |
-| Solidity-ABI public inputs | 256 |
-| Parachain header | varies (313 in this fixture) |
-| Groth16 VK | 492 |
-| Compiled program (.so) | ~143,520 |
+Byte-identical to the EVM verifier's public-input construction in [`sp1.rs:77-83`](https://github.com/polytope-labs/hyperbridge/blob/main/modules/consensus/beefy/verifier/src/sp1.rs#L77-L83). Encoded length is 256 bytes for this fixture (1 header). See `build_public_inputs` in either script for the implementation.
 
-### Tx-size envelope
+## Regenerating fixtures
 
-Instruction data: `32 + 4 + 356 + 256 = 648 B`.
-Plus Solana tx framing: ~800 B total. **Under the 1232-B cap** — single-header BEEFY fits in one tx without a buffer-account pattern. Multi-header would still need one.
+The scripts under `scripts/` use the inlined hex and don't touch a live network. If you need a fresh BEEFY proof for a different block or different SP1 version:
 
-### Smoke test result
+1. Check out the [polytope-labs/hyperbridge](https://github.com/polytope-labs/hyperbridge) repo.
+2. Run `dump_sp1_fixture_scale_bytes` in `modules/consensus/beefy/verifier/src/test.rs` against a node pair (relay + parachain). It prints hex strings ready to inline.
+3. Replace the three `*_HEX` constants in `scripts/src/{main,onchain_tx}.rs`.
 
-- SCALE decode: **works**.
-- Public-input construction: **works** (byte-faithful port of the EVM verifier's logic).
-- `verify_sp1_v6` (groth16-solana direct): **passes** on the real fixture.
-  - `exit_code`: 0x00…
-  - `vk_root`: 0x002f850ee9…
-  - `proof_nonce`: 0x00…
-
-### BPF build
-
-`cargo build-sbf` succeeds with 0 errors (only cosmetic `cfg` warnings from `solana_program::entrypoint!`). Dep tree (arkworks BN254 + groth16-solana + num-bigint) all compile for `sbpf-solana-solana`.
-
-### What's still unproven
-
-- Actual CU cost on-chain (need deploy + tx submission on `solana-test-validator`).
-- Multi-header BEEFY proofs (1 header measured; n > 1 requires re-generated fixtures).
+For a new SP1 version, also regenerate `proofs/groth16_vk_v6_1_0.bin` and `VK_ROOT_V6_1_0_BYTES`.
