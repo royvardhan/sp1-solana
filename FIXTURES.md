@@ -9,7 +9,6 @@ Quick reference for the Phase 2 spike. For the full context see `../SOLANA_INTEG
 | `WIRE_PROOF` | `modules/pallets/beefy-consensus-proofs/src/benchmarking.rs:39` | 808 B | Real Hyperbridge BEEFY wire proof (`[0x01] ++ SCALE(Sp1BeefyProof)`). Same proof as `evm/test/SP1BeefyTest.sol::testVerifySp1Optional`. |
 | `TRUSTED_STATE_SCALE` | `modules/pallets/beefy-consensus-proofs/src/benchmarking.rs:37` | 128 B | SCALE-encoded `ConsensusState` matching `WIRE_PROOF`. `next_authorities.id` rewritten 0x1276 → 0x1275 to exercise the rotation path. |
 | Vkey hash | `FIXTURE_VKEY` in same file, line 41 | 32 B | `0x0059fd0bff44da77999bb7974cbcf2ac7dc89e5869352f20a2f3cd46c9f53d5c` |
-| `fibonacci_proof.bin` | `succinctlabs/sp1-solana` master, `proofs/fibonacci_proof.bin` | 1415 B (bincode) | Fallback smoke-test proof. Not currently used — kept as a known-good v5 reference. |
 | v6.1.0 Groth16 VK | `succinctlabs/sp1` v6.1.0 `crates/verifier/vk-artifacts/groth16_vk.bin` | 492 B | Byte-identical to polytope-labs fork. Needed for the Path A port. sha256 `4388a21c687fdd5f218d7e3d13190cac4c5355818d3605fd5fb811df468ee696`. |
 
 Both `WIRE_PROOF` and `TRUSTED_STATE_SCALE` are inlined as hex constants in `scripts/src/main.rs` — the script has no runtime dependency on the hyperbridge crates, so the `solana/` workspace stays clean of `polkadot-sdk`.
