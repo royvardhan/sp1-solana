@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = [
+    "programs/sp1-verify-spike",
+    "scripts",
+]
+
+[workspace.dependencies]
+solana-program = "=2.1.6"
+solana-sdk = "=2.1.6"
+solana-program-test = "=2.1.6"
+borsh = "1.5.1"
+sha2 = "0.10.8"
+sha3 = "0.10.8"
+tokio = { version = "1.40", features = ["full"] }
+hex = "0.4.3"
+parity-scale-codec = { version = "3.6", features = ["derive"] }
+alloy-sol-types = "0.8"
+alloy-primitives = "0.8"
+
+sp1-solana = { git = "https://github.com/succinctlabs/sp1-solana", branch = "master" }
