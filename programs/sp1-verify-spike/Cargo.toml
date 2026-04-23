@@ -15,5 +15,11 @@ default = []
 [dependencies]
 borsh.workspace = true
 solana-program.workspace = true
-sp1-solana.workspace = true
+parity-scale-codec.workspace = true
 sha2.workspace = true
+hex.workspace = true
+groth16-solana.workspace = true
+num-bigint.workspace = true
+ark-bn254.workspace = true
+ark-ff.workspace = true
+ark-serialize.workspace = true
