@@ -12,6 +12,10 @@ path = "src/main.rs"
 name = "onchain-tx"
 path = "src/onchain_tx.rs"
 
+[[bin]]
+name = "tx-size-sweep"
+path = "src/tx_size_sweep.rs"
+
 [dependencies]
 sp1-verify-spike = { path = "../programs/sp1-verify-spike", default-features = false, features = ["no-entrypoint"] }
 parity-scale-codec.workspace = true

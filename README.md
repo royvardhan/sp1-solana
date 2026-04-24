@@ -14,12 +14,26 @@ Built while wiring Hyperbridge's BEEFY consensus proofs to Solana, but the core 
 
 All within Solana's hard limits, single-transaction, no buffer-account pattern needed for the measured fixture.
 
+## Multi-header capacity
+
+A BEEFY proof can finalize multiple parachain headers at once. The inner SP1 Groth16 proof stays 356 B regardless — only the `public_inputs` vector grows, by exactly 64 B per extra header (one Solidity-ABI `(uint256 id, bytes32 hash)` tuple). Measured by `scripts/src/tx_size_sweep.rs`:
+
+| Headers | tx size | Headroom |
+|--------:|--------:|---------:|
+| 1 | 859 B | +373 |
+| 3 | 987 B | +245 |
+| 6 | 1179 B | +53 |
+| 7 | 1243 B | **OVER** (−11) |
+
+Up to **6 parachain headers fit in a single Solana transaction**. Beyond that, a buffer-account pattern (pre-upload public inputs, reference by address) is required. CU cost is essentially flat across N because SP1 v6 always commits to exactly 5 Groth16 public inputs regardless of inner circuit shape — per-header growth is only a handful of CU from hashing the slightly larger ABI payload.
+
 ## Layout
 
 - `programs/sp1-verify-spike/` — on-chain Solana program. `verifier.rs` is the SP1 v6 entrypoint.
-- `scripts/` — two binaries:
+- `scripts/` — three binaries:
   - `sp1-verify-spike-script` — host-side smoke test (runs the verifier natively for quick iteration).
   - `onchain-tx` — deploys to a live validator, submits a real tx, reads consumed CU from the receipt.
+  - `tx-size-sweep` — builds (never submits) transactions with N = 1..=10 synthesized headers and reports wire size. No validator needed.
 - `proofs/` — fixtures. See [`FIXTURES.md`](./FIXTURES.md).
 
 ## Build
@@ -32,6 +46,9 @@ cd scripts && cargo run --release --bin sp1-verify-spike-script
 
 # Solana BPF build (produces target/deploy/sp1_verify_spike.so)
 cargo build-sbf --manifest-path programs/sp1-verify-spike/Cargo.toml
+
+# Multi-header tx-size sweep (no validator required)
+cd scripts && cargo run --release --bin tx-size-sweep
 ```
 
 ## Run end-to-end on a local validator
@@ -95,5 +112,5 @@ The Groth16 public-input vector grew from 2 elements (v5) to 5 elements (v6):
 - [x] Host verifier works against a real SP1 v6 fixture.
 - [x] Solana program builds, deploys, and verifies on-chain.
 - [x] Compute units and transaction size measured under real-validator conditions.
-- [ ] Multi-parachain-header BEEFY proofs (would likely exceed the 1,232 B tx cap at ≥ 3 headers → buffer-account upload pattern needed).
+- [x] Multi-parachain-header capacity measured: up to 6 headers fit in a single tx; buffer-account pattern only needed beyond that.
 - [ ] Mainnet deployment.
